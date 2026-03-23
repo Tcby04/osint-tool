@@ -214,6 +214,33 @@ async def lookup_email(email: str, entities: dict, cross_refs: list, raw: list):
                     for e in entities.get("emails", []):
                         if e.get("value") == email:
                             e["breach_count"] = len(breaches)
+
+                    # Extract usernames and social profiles from breach data
+                    # Some breaches contain usernames and social media info
+                    breach_usernames = []
+                    breach_platforms = set()
+                    for breach in breaches:
+                        dc = breach.get("DataClasses", [])
+                        if "Usernames" in dc:
+                            breach_usernames.append(breach.get("Name", "unknown"))
+                        if "Social media profiles" in dc or "Email addresses" in dc:
+                            breach_platforms.add(breach.get("Name", ""))
+                    
+                    # Also try to find "affected systems" — some breaches like Twitter200M
+                    # specifically link email → Twitter handle
+                    twitter_breach = next((b for b in breaches if "Twitter" in b.get("Name", "") or "twitter" in b.get("Domain", "")), None)
+                    if twitter_breach:
+                        add_raw(raw, "Twitter Breach Link", "found",
+                                "Email found in Twitter breach",
+                                f"This email was in the Twitter 200M breach — email was used to look up Twitter accounts.",
+                                tags=["breach", "twitter", "social"])
+                    
+                    if breach_usernames:
+                        add_raw(raw, "Breach Username Data", "found",
+                                f"Breaches may contain username data",
+                                f"These breaches include username fields: {', '.join(breach_usernames[:5])}",
+                                tags=["breach", "usernames"])
+            
             elif resp and resp.status_code == 404:
                 add_raw(raw, "Have I Been Pwned", "not_found",
                         "No breaches found", "Not found in known data breaches.", tags=["breach"])
@@ -223,7 +250,80 @@ async def lookup_email(email: str, entities: dict, cross_refs: list, raw: list):
     except Exception:
         pass
 
-    # 5. Gravatar check
+    # 5. Try email local part as potential username — many people use email local part as username
+    email_local = email.split("@")[0].lower().strip()
+    # Clean: remove dots from gmail, remove +tags, remove common separators
+    if "gmail" in domain:
+        email_local = email_local.replace(".", "")
+        if "+" in email_local:
+            email_local = email_local.split("+")[0]
+    # Only try if it looks like a username (3-30 chars, alphanumeric + underscore)
+    if re.match(r'^[a-z0-9_-]{3,30}$', email_local):
+        add_raw(raw, "Email→Username Match", "attempting",
+                f"Trying '{email_local}' as potential username",
+                f"Email local part as possible social media handle.",
+                tags=["crosslink", "username"])
+        # Check if this username exists on key platforms
+        found_on = []
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            checks = [
+                ("GitHub", f"https://api.github.com/users/{email_local}"),
+                ("Twitter", f"https://twitter.com/{email_local}"),
+                ("Instagram", f"https://instagram.com/{email_local}"),
+                ("Reddit", f"https://reddit.com/user/{email_local}"),
+                ("TikTok", f"https://tiktok.com/@{email_local}"),
+            ]
+            for platform, url in checks:
+                try:
+                    resp = await http_get(client, url,
+                        headers={"User-Agent": "OSINT-Tool-v5"})
+                    if resp and resp.status_code == 200:
+                        found_on.append(platform)
+                        if platform == "GitHub":
+                            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                            gh_name = data.get("name") or data.get("login", email_local)
+                            gh_bio = data.get("bio") or ""
+                            gh_email = data.get("email") or ""
+                            add_entity(entities, "usernames", {
+                                "value": email_local, "source": "email_local",
+                                "platform": "GitHub",
+                                "url": f"https://github.com/{email_local}",
+                                "bio": gh_bio
+                            })
+                            if gh_email:
+                                add_entity(entities, "emails", {
+                                    "value": gh_email, "source": "github_profile_from_email_local",
+                                    "domain": gh_email.split("@")[1] if "@" in gh_email else ""
+                                })
+                                add_cross_ref(cross_refs, email, gh_email,
+                                              f"GitHub profile for {email_local} has public email")
+                            add_cross_ref(cross_refs, email, email_local,
+                                          f"GitHub account '{email_local}' found — email local part matches username")
+                        else:
+                            add_entity(entities, "accounts", {
+                                "platform": platform,
+                                "username": email_local,
+                                "url": url,
+                                "found_via": "email_local"
+                            })
+                            add_cross_ref(cross_refs, email, email_local,
+                                          f"Account '{email_local}' found on {platform} — matches email local part")
+                        await asyncio.sleep(0.3)  # rate limit
+                except Exception:
+                    pass
+        
+        if found_on:
+            add_raw(raw, "Email Local → Username", "found",
+                    f"Email local part '{email_local}' found on {', '.join(found_on)}",
+                    f"The username '{email_local}' (from {email}) was found on {', '.join(found_on)}.",
+                    tags=["crosslink", "found"])
+        else:
+            add_raw(raw, "Email Local → Username", "not_found",
+                    f"'{email_local}' not found on major platforms",
+                    f"Email local part doesn't appear to be a username on checked platforms.",
+                    tags=["crosslink"])
+
+    # 6. Gravatar check
     md5 = md5_hash_email(email)
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
