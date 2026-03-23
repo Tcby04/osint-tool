@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSINT Lookup</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .container { max-width: 720px; margin: 0 auto; }
+
+        header { text-align: center; margin-bottom: 2.5rem; }
+
+        header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.5px;
+        }
+
+        header p { color: #777; font-size: 0.95rem; }
+
+        .lookup-form {
+            background: #111118;
+            border: 1px solid #1e1e2e;
+            border-radius: 14px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .type-selector {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .type-btn {
+            flex: 1;
+            padding: 0.65rem 1rem;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .type-btn:hover { border-color: #4a4a5a; color: #ccc; }
+
+        .type-btn.active {
+            border-color: #6366f1;
+            background: #6366f118;
+            color: #a5b4fc;
+        }
+
+        .type-btn .icon { font-size: 1.2rem; display: block; margin-bottom: 0.2rem; }
+
+        .input-group { display: flex; gap: 0.75rem; }
+
+        #query-input {
+            flex: 1;
+            padding: 0.8rem 1rem;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #query-input:focus { border-color: #6366f1; }
+        #query-input::placeholder { color: #444; }
+
+        #lookup-btn {
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 10px;
+            background: #6366f1;
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        #lookup-btn:hover { background: #4f46e5; transform: translateY(-1px); }
+        #lookup-btn:disabled { background: #333; cursor: not-allowed; transform: none; }
+
+        .hint { font-size: 0.8rem; color: #555; margin-top: 0.75rem; }
+
+        /* Results */
+        .results { display: none; }
+        .results.visible { display: block; }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .results-header h2 { font-size: 1.1rem; color: #fff; }
+        .results-count { font-size: 0.85rem; color: #666; }
+
+        .result-card {
+            background: #111118;
+            border: 1px solid #1e1e2e;
+            border-radius: 10px;
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 0.4rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: border-color 0.2s;
+        }
+
+        .result-card:hover { border-color: #2a2a3a; }
+
+        .result-card.found { border-left: 3px solid #22c55e; }
+        .result-card.not_found { border-left: 3px solid #333; }
+        .result-card.error { border-left: 3px solid #f59e0b; }
+
+        .result-info { flex: 1; }
+        .result-site {
+            font-weight: 600;
+            color: #fff;
+            font-size: 0.95rem;
+        }
+
+        .result-site a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .result-site a:hover { text-decoration: underline; }
+
+        .result-detail {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 0.2rem;
+        }
+
+        .result-status {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .result-status.found { background: #22c55e18; color: #4ade80; }
+        .result-status.not_found { background: #ffffff08; color: #555; }
+        .result-status.error { background: #f59e0b18; color: #fbbf24; }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            border: 2.5px solid #222;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 0.75rem;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-msg {
+            background: #ef444415;
+            border: 1px solid #ef444430;
+            border-radius: 10px;
+            padding: 1rem;
+            color: #f87171;
+            text-align: center;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+            padding: 1rem 1.25rem;
+            background: #111118;
+            border: 1px solid #1e1e2e;
+            border-radius: 12px;
+        }
+
+        .stat { text-align: center; flex: 1; }
+        .stat-num { font-size: 1.5rem; font-weight: 700; color: #fff; }
+        .stat-num.green { color: #4ade80; }
+        .stat-num.gray { color: #555; }
+        .stat-num.yellow { color: #fbbf24; }
+        .stat-label { font-size: 0.75rem; color: #666; margin-top: 0.15rem; }
+
+        footer {
+            text-align: center;
+            margin-top: 3rem;
+            color: #333;
+            font-size: 0.75rem;
+        }
+
+        /* Detail data for phone */
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .detail-item {
+            background: #0a0a0f;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+        }
+
+        .detail-key { font-size: 0.7rem; color: #666; text-transform: uppercase; }
+        .detail-val { font-size: 0.85rem; color: #ccc; margin-top: 0.1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 OSINT Lookup</h1>
+            <p>Search accounts & public info from email, username, or phone</p>
+        </header>
+
+        <div class="lookup-form">
+            <div class="type-selector">
+                <button class="type-btn active" data-type="username">
+                    <span class="icon">👤</span>Username
+                </button>
+                <button class="type-btn" data-type="email">
+                    <span class="icon">📧</span>Email
+                </button>
+                <button class="type-btn" data-type="phone">
+                    <span class="icon">📱</span>Phone
+                </button>
+            </div>
+            <div class="input-group">
+                <input type="text" id="query-input" placeholder="Enter a username...">
+                <button id="lookup-btn">Search</button>
+            </div>
+            <div class="hint" id="hint">Checks 25+ sites for this username</div>
+        </div>
+
+        <div class="loading" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <div>Searching...</div>
+        </div>
+
+        <div class="results" id="results">
+            <div class="stats-bar" id="stats-bar"></div>
+            <div class="results-header">
+                <h2>Results</h2>
+            </div>
+            <div id="results-list"></div>
+        </div>
+
+        <div class="error-msg" id="error" style="display: none;"></div>
+
+        <footer>Personal OSINT Tool — authorized use only</footer>
+    </div>
+
+    <script>
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:8000'
+    : 'https://osint-tool-c2np.onrender.com';
+
+        let currentType = 'username';
+
+        const hints = {
+            username: 'Checks 25+ sites for this username',
+            email: 'Checks Gravatar, GitHub, HIBP breaches & more',
+            phone: 'Carrier, country & timezone lookup'
+        };
+
+        const placeholders = {
+            username: 'Enter a username...',
+            email: 'Enter an email address...',
+            phone: 'Enter a phone number (with country code)...'
+        };
+
+        document.querySelectorAll('.type-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentType = btn.dataset.type;
+                document.getElementById('query-input').placeholder = placeholders[currentType];
+                document.getElementById('hint').textContent = hints[currentType];
+            });
+        });
+
+        document.getElementById('lookup-btn').addEventListener('click', doLookup);
+        document.getElementById('query-input').addEventListener('keypress', e => {
+            if (e.key === 'Enter') doLookup();
+        });
+
+        async function doLookup() {
+            const query = document.getElementById('query-input').value.trim();
+            if (!query) return;
+
+            const btn = document.getElementById('lookup-btn');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            const error = document.getElementById('error');
+
+            btn.disabled = true;
+            btn.textContent = 'Searching...';
+            loading.style.display = 'block';
+            results.classList.remove('visible');
+            error.style.display = 'none';
+
+            try {
+                const resp = await fetch(`${API_URL}/lookup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, lookup_type: currentType })
+                });
+
+                if (!resp.ok) {
+                    const errData = await resp.json();
+                    throw new Error(errData.detail || 'Lookup failed');
+                }
+
+                const data = await resp.json();
+                displayResults(data);
+            } catch (err) {
+                error.textContent = err.message || 'Something went wrong';
+                error.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Search';
+                loading.style.display = 'none';
+            }
+        }
+
+        function displayResults(data) {
+            const resultsList = document.getElementById('results-list');
+            const resultsDiv = document.getElementById('results');
+            const statsBar = document.getElementById('stats-bar');
+
+            resultsList.innerHTML = '';
+
+            const found = data.results.filter(r => r.status === 'found');
+            const notFound = data.results.filter(r => r.status === 'not_found');
+            const errors = data.results.filter(r => r.status === 'error' || r.status === 'raw');
+
+            // Stats bar
+            statsBar.innerHTML = `
+                <div class="stat"><div class="stat-num green">${found.length}</div><div class="stat-label">Found</div></div>
+                <div class="stat"><div class="stat-num gray">${notFound.length}</div><div class="stat-label">Not Found</div></div>
+                <div class="stat"><div class="stat-num yellow">${errors.length}</div><div class="stat-label">Errors</div></div>
+                <div class="stat"><div class="stat-num">${data.results.length}</div><div class="stat-label">Total Checked</div></div>
+            `;
+
+            // Sort: found first, then not found, then errors
+            const sorted = [...found, ...notFound, ...errors];
+
+            sorted.forEach(result => {
+                const card = document.createElement('div');
+                card.className = `result-card ${result.status}`;
+
+                const siteName = result.url
+                    ? `<a href="${result.url}" target="_blank" rel="noopener">${result.site}</a>`
+                    : result.site;
+
+                let detailHtml = '';
+                if (result.detail) {
+                    detailHtml = `<div class="result-detail">${result.detail}</div>`;
+                }
+
+                // Phone data display
+                if (result.data && currentType === 'phone') {
+                    const d = result.data;
+                    detailHtml += `
+                        <div class="detail-grid">
+                            <div class="detail-item"><div class="detail-key">Country</div><div class="detail-val">${d.country || 'N/A'}</div></div>
+                            <div class="detail-item"><div class="detail-key">Carrier</div><div class="detail-val">${d.carrier || 'N/A'}</div></div>
+                            <div class="detail-item"><div class="detail-key">Timezone</div><div class="detail-val">${d.timezones ? d.timezones[0] : 'N/A'}</div></div>
+                            <div class="detail-item"><div class="detail-key">Formatted</div><div class="detail-val">${d.formatted || 'N/A'}</div></div>
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <div class="result-info">
+                        <div class="result-site">${siteName}</div>
+                        ${detailHtml}
+                    </div>
+                    <span class="result-status ${result.status}">${statusLabel(result.status)}</span>
+                `;
+                resultsList.appendChild(card);
+            });
+
+            resultsDiv.classList.add('visible');
+        }
+
+        function statusLabel(status) {
+            switch (status) {
+                case 'found': return '✓ Found';
+                case 'not_found': return '—';
+                case 'error': return '⚠ Error';
+                default: return status;
+            }
+        }
+    </script>
+</body>
+</html>
