@@ -2,424 +2,962 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OSINT Lookup</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    <title>OSINT Lookup — Cross-Linked Identity Search</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* ── Reset & Base ─────────────────────────────────── */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* OKLCH — no purple anywhere */
+            --bg:          oklch(14% 0.015 260);   /* #0d0e14 near-black blue */
+            --surface:     oklch(18% 0.018 260);   /* #16171f card bg */
+            --surface-2:   oklch(22% 0.022 260);   /* #1e1f2a elevated */
+            --border:      oklch(26% 0.022 260);  /* #2a2b38 */
+            --border-dim:  oklch(20% 0.018 260);  /* subtle divider */
+
+            --text:        oklch(92% 0.015 260);   /* #f0f0f5 */
+            --text-muted:  oklch(60% 0.020 260);  /* #8a8b99 */
+            --text-dim:    oklch(40% 0.018 260);  /* #56576a */
+
+            /* Cyan-green accent — the "hacker" signal color */
+            --accent:      oklch(72% 0.170 195);   /* #33d9b3 */
+            --accent-dim:  oklch(65% 0.140 195);  /* muted accent */
+
+            --green:       oklch(70% 0.180 145);   /* #4ade80 green */
+            --yellow:      oklch(75% 0.160  85);  /* #fbbf24 amber */
+            --red:         oklch(65% 0.200  25);  /* #f87171 danger */
+            --blue:        oklch(70% 0.140 240);   /* #60a5fa info */
+
+            --radius:      10px;
+            --radius-lg:   16px;
+            --transition:  0.18s ease;
+        }
+
+        html { font-size: 16px; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a0a0f;
-            color: #e0e0e0;
-            min-height: 100vh;
-            padding: 2rem 1rem;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100dvh;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
         }
 
-        .container { max-width: 720px; margin: 0 auto; }
-
-        header { text-align: center; margin-bottom: 2.5rem; }
-
-        header h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #fff;
-            margin-bottom: 0.5rem;
-            letter-spacing: -0.5px;
+        /* ── Layout ───────────────────────────────────────── */
+        .container {
+            max-width: 680px;
+            margin: 0 auto;
+            padding: 2rem 1.25rem 4rem;
         }
 
-        header p { color: #777; font-size: 0.95rem; }
+        /* ── Header ───────────────────────────────────────── */
+        .header { margin-bottom: 2rem; text-align: center; }
 
-        .lookup-form {
-            background: #111118;
-            border: 1px solid #1e1e2e;
+        .header-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 52px;
+            height: 52px;
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
         }
 
-        .type-selector {
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            color: var(--text);
+            margin-bottom: 0.35rem;
+        }
+
+        .header p {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Search Card ───────────────────────────────────── */
+        .search-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Type selector tabs */
+        .type-tabs {
             display: flex;
-            gap: 0.5rem;
+            gap: 0.4rem;
             margin-bottom: 1rem;
         }
 
-        .type-btn {
+        .type-tab {
             flex: 1;
-            padding: 0.65rem 1rem;
-            border: 1px solid #2a2a3a;
-            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.6rem 0.5rem;
+            border: 1px solid var(--border-dim);
+            border-radius: 8px;
             background: transparent;
-            color: #888;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-            text-align: center;
-        }
-
-        .type-btn:hover { border-color: #4a4a5a; color: #ccc; }
-
-        .type-btn.active {
-            border-color: #6366f1;
-            background: #6366f118;
-            color: #a5b4fc;
-        }
-
-        .type-btn .icon { font-size: 1.2rem; display: block; margin-bottom: 0.2rem; }
-
-        .input-group { display: flex; gap: 0.75rem; }
-
-        #query-input {
-            flex: 1;
-            padding: 0.8rem 1rem;
-            border: 1px solid #2a2a3a;
-            border-radius: 10px;
-            background: #0a0a0f;
-            color: #e0e0e0;
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        #query-input:focus { border-color: #6366f1; }
-        #query-input::placeholder { color: #444; }
-
-        #lookup-btn {
-            padding: 0.8rem 2rem;
-            border: none;
-            border-radius: 10px;
-            background: #6366f1;
-            color: #fff;
-            font-size: 0.95rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
-        }
-
-        #lookup-btn:hover { background: #4f46e5; transform: translateY(-1px); }
-        #lookup-btn:disabled { background: #333; cursor: not-allowed; transform: none; }
-
-        .hint { font-size: 0.8rem; color: #555; margin-top: 0.75rem; }
-
-        /* Results */
-        .results { display: none; }
-        .results.visible { display: block; }
-
-        .results-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .results-header h2 { font-size: 1.1rem; color: #fff; }
-        .results-count { font-size: 0.85rem; color: #666; }
-
-        .result-card {
-            background: #111118;
-            border: 1px solid #1e1e2e;
-            border-radius: 10px;
-            padding: 0.85rem 1.1rem;
-            margin-bottom: 0.4rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: border-color 0.2s;
-        }
-
-        .result-card:hover { border-color: #2a2a3a; }
-
-        .result-card.found { border-left: 3px solid #22c55e; }
-        .result-card.not_found { border-left: 3px solid #333; }
-        .result-card.error { border-left: 3px solid #f59e0b; }
-
-        .result-info { flex: 1; }
-        .result-site {
-            font-weight: 600;
-            color: #fff;
-            font-size: 0.95rem;
-        }
-
-        .result-site a {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        .result-site a:hover { text-decoration: underline; }
-
-        .result-detail {
+            color: var(--text-muted);
             font-size: 0.8rem;
-            color: #888;
-            margin-top: 0.2rem;
-        }
-
-        .result-status {
-            font-size: 0.75rem;
-            padding: 0.2rem 0.6rem;
-            border-radius: 20px;
             font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition);
+            font-family: inherit;
         }
 
-        .result-status.found { background: #22c55e18; color: #4ade80; }
-        .result-status.not_found { background: #ffffff08; color: #555; }
-        .result-status.error { background: #f59e0b18; color: #fbbf24; }
-
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #666;
+        .type-tab:hover {
+            border-color: var(--border);
+            color: var(--text);
         }
+
+        .type-tab.active {
+            border-color: var(--accent);
+            background: oklch(72% 0.170 195 / 0.08);
+            color: var(--accent);
+        }
+
+        .type-tab svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+        /* Input row */
+        .input-row {
+            display: flex;
+            gap: 0.6rem;
+        }
+
+        .query-input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 0.95rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color var(--transition);
+            min-width: 0;
+        }
+
+        .query-input:focus { border-color: var(--accent); }
+        .query-input::placeholder { color: var(--text-dim); }
+
+        .search-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.4rem;
+            border: none;
+            border-radius: 8px;
+            background: var(--accent);
+            color: oklch(14% 0.015 195);  /* dark text on cyan */
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all var(--transition);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        .search-btn:active { transform: translateY(0); }
+        .search-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            filter: none;
+        }
+
+        .search-btn svg { width: 15px; height: 15px; }
+
+        /* Type hint below input */
+        .type-hint {
+            margin-top: 0.6rem;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .type-hint svg { width: 12px; height: 12px; }
+
+        /* ── Loading State ────────────────────────────────── */
+        .loading-state {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            padding: 3rem 1rem;
+            gap: 0.75rem;
+        }
+
+        .loading-state.visible { display: flex; }
 
         .spinner {
-            display: inline-block;
-            width: 28px;
-            height: 28px;
-            border: 2.5px solid #222;
-            border-top-color: #6366f1;
+            width: 36px;
+            height: 36px;
+            border: 2.5px solid var(--border);
+            border-top-color: var(--accent);
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-bottom: 0.75rem;
+            animation: spin 0.75s linear infinite;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .error-msg {
-            background: #ef444415;
-            border: 1px solid #ef444430;
-            border-radius: 10px;
-            padding: 1rem;
-            color: #f87171;
-            text-align: center;
+        .loading-state p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
         }
 
-        .stats-bar {
-            display: flex;
-            gap: 1.5rem;
-            margin-bottom: 1.5rem;
-            padding: 1rem 1.25rem;
-            background: #111118;
-            border: 1px solid #1e1e2e;
-            border-radius: 12px;
-        }
-
-        .stat { text-align: center; flex: 1; }
-        .stat-num { font-size: 1.5rem; font-weight: 700; color: #fff; }
-        .stat-num.green { color: #4ade80; }
-        .stat-num.gray { color: #555; }
-        .stat-num.yellow { color: #fbbf24; }
-        .stat-label { font-size: 0.75rem; color: #666; margin-top: 0.15rem; }
-
-        footer {
-            text-align: center;
-            margin-top: 3rem;
-            color: #333;
+        .loading-query {
             font-size: 0.75rem;
+            color: var(--text-dim);
+            font-family: 'Courier New', monospace;
         }
 
-        /* Detail data for phone */
+        /* ── Error State ──────────────────────────────────── */
+        .error-state {
+            display: none;
+            background: oklch(65% 0.200 25 / 0.08);
+            border: 1px solid oklch(65% 0.200 25 / 0.25);
+            border-radius: var(--radius);
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .error-state.visible { display: flex; align-items: flex-start; gap: 0.75rem; }
+
+        .error-state svg { width: 18px; height: 18px; color: var(--red); flex-shrink: 0; margin-top: 1px; }
+        .error-state p { font-size: 0.875rem; color: var(--red); }
+
+        /* ── Results ─────────────────────────────────────── */
+        .results { display: none; }
+        .results.visible { display: block; }
+
+        /* Summary banner */
+        .summary-banner {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .summary-banner strong { color: var(--text); }
+
+        /* Stats row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-chip {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.6rem 0.5rem;
+            text-align: center;
+        }
+
+        .stat-chip .num {
+            font-size: 1.3rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.2rem;
+        }
+
+        .stat-chip .lbl {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+        }
+
+        .stat-chip.found   .num { color: var(--green); }
+        .stat-chip.notfound .num { color: var(--text-dim); }
+        .stat-chip.error   .num { color: var(--yellow); }
+        .stat-chip.linked  .num { color: var(--blue); }
+
+        /* Section headings */
+        .section { margin-bottom: 1.5rem; }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-dim);
+            margin-bottom: 0.6rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-dim);
+        }
+
+        .section-count {
+            background: var(--surface-2);
+            border: 1px solid var(--border-dim);
+            border-radius: 20px;
+            padding: 0.05rem 0.5rem;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* Result cards */
+        .result-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.4rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            transition: border-color var(--transition);
+        }
+
+        .result-card:hover { border-color: var(--border); }
+
+        .result-card.found  { border-left: 3px solid var(--green); }
+        .result-card.not_found,
+        .result-card.absent { border-left: 3px solid var(--border-dim); }
+        .result-card.error  { border-left: 3px solid var(--yellow); }
+
+        /* Platform icon placeholder */
+        .result-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--surface-2);
+            border: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+            color: var(--text-muted);
+        }
+
+        .result-body { flex: 1; min-width: 0; }
+
+        .result-platform {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .result-platform a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .result-platform a:hover { text-decoration: underline; }
+
+        .result-detail {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+            line-height: 1.5;
+        }
+
+        .result-source {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-top: 0.25rem;
+            font-family: 'Courier New', monospace;
+        }
+
         .detail-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 0.5rem;
-            margin-top: 0.75rem;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
         }
 
         .detail-item {
-            background: #0a0a0f;
-            padding: 0.5rem 0.75rem;
+            background: var(--bg);
+            padding: 0.4rem 0.6rem;
             border-radius: 6px;
+            border: 1px solid var(--border-dim);
         }
 
-        .detail-key { font-size: 0.7rem; color: #666; text-transform: uppercase; }
-        .detail-val { font-size: 0.85rem; color: #ccc; margin-top: 0.1rem; }
+        .detail-key { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+        .detail-val { font-size: 0.8rem; color: var(--text); margin-top: 0.1rem; }
+
+        .result-status {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            align-self: center;
+        }
+
+        .result-status.found    { background: oklch(70% 0.180 145 / 0.12); color: var(--green); }
+        .result-status.not_found,
+        .result-status.absent    { background: oklch(40% 0.018 260 / 0.3); color: var(--text-dim); }
+        .result-status.error     { background: oklch(75% 0.160  85 / 0.12); color: var(--yellow); }
+
+        /* Cross-linked identities */
+        .linked-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.6rem 0.9rem;
+            margin-bottom: 0.4rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .linked-type {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-dim);
+            min-width: 36px;
+        }
+
+        .linked-value {
+            font-size: 0.85rem;
+            color: var(--text);
+            font-family: 'Courier New', monospace;
+            flex: 1;
+        }
+
+        .linked-tag {
+            font-size: 0.65rem;
+            background: oklch(70% 0.140 240 / 0.12);
+            color: var(--blue);
+            padding: 0.15rem 0.5rem;
+            border-radius: 20px;
+        }
+
+        /* Empty section */
+        .empty-section {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            padding: 0.5rem 0;
+            font-style: italic;
+        }
+
+        /* ── Footer ───────────────────────────────────────── */
+        .footer {
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            border-top: 1px solid var(--border-dim);
+            padding-top: 1.5rem;
+        }
+
+        /* ── Mobile (375px+) ──────────────────────────────── */
+        @media (max-width: 480px) {
+            .container { padding: 1.25rem 1rem 3rem; }
+            .header h1 { font-size: 1.25rem; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            .input-row { flex-direction: column; }
+            .search-btn { width: 100%; justify-content: center; }
+            .type-tab { font-size: 0.75rem; }
+            .type-tab span { display: none; } /* show icon+label on mobile */
+        }
+
+        /* ── Animations ──────────────────────────────────── */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-card, .linked-item { animation: fadeUp 0.25s ease both; }
+
+        .result-card:nth-child(1)  { animation-delay: 0.00s; }
+        .result-card:nth-child(2)  { animation-delay: 0.04s; }
+        .result-card:nth-child(3)  { animation-delay: 0.08s; }
+        .result-card:nth-child(4)  { animation-delay: 0.12s; }
+        .result-card:nth-child(5)  { animation-delay: 0.16s; }
+        .result-card:nth-child(n+6) { animation-delay: 0.20s; }
+
+        .linked-item:nth-child(1) { animation-delay: 0.05s; }
+        .linked-item:nth-child(2) { animation-delay: 0.10s; }
+        .linked-item:nth-child(3) { animation-delay: 0.15s; }
+
+        /* ── Scrollbar ───────────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🔍 OSINT Lookup</h1>
-            <p>Search accounts & public info from email, username, or phone</p>
-        </header>
+<div class="container">
 
-        <div class="lookup-form">
-            <div class="type-selector">
-                <button class="type-btn active" data-type="username">
-                    <span class="icon">👤</span>Username
-                </button>
-                <button class="type-btn" data-type="email">
-                    <span class="icon">📧</span>Email
-                </button>
-                <button class="type-btn" data-type="phone">
-                    <span class="icon">📱</span>Phone
-                </button>
-            </div>
-            <div class="input-group">
-                <input type="text" id="query-input" placeholder="Enter a username...">
-                <button id="lookup-btn">Search</button>
-            </div>
-            <div class="hint" id="hint">Checks 25+ sites for this username</div>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-icon">🔍</div>
+        <h1>OSINT Lookup</h1>
+        <p>Cross-linked identity search — email, phone, or username</p>
+    </header>
+
+    <!-- Search Card -->
+    <div class="search-card">
+        <div class="type-tabs">
+            <button class="type-tab active" data-type="username">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                <span>Username</span>
+            </button>
+            <button class="type-tab" data-type="email">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                <span>Email</span>
+            </button>
+            <button class="type-tab" data-type="phone">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.29 6.29l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <span>Phone</span>
+            </button>
         </div>
-
-        <div class="loading" id="loading" style="display: none;">
-            <div class="spinner"></div>
-            <div>Searching...</div>
+        <div class="input-row">
+            <input type="text" class="query-input" id="query-input" placeholder="Enter a username…" autocomplete="off" spellcheck="false">
+            <button class="search-btn" id="search-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                Search
+            </button>
         </div>
-
-        <div class="results" id="results">
-            <div class="stats-bar" id="stats-bar"></div>
-            <div class="results-header">
-                <h2>Results</h2>
-            </div>
-            <div id="results-list"></div>
+        <div class="type-hint" id="type-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span id="hint-text">Checks 30+ sites for username presence</span>
         </div>
-
-        <div class="error-msg" id="error" style="display: none;"></div>
-
-        <footer>Personal OSINT Tool — authorized use only</footer>
     </div>
 
-    <script>
-        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:8000'
-    : 'https://osint-tool-c2np.onrender.com';
+    <!-- Loading -->
+    <div class="loading-state" id="loading-state">
+        <div class="spinner"></div>
+        <p>Scanning sources…</p>
+        <p class="loading-query" id="loading-query"></p>
+    </div>
 
-        let currentType = 'username';
+    <!-- Error -->
+    <div class="error-state" id="error-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>
+        <p id="error-text">Something went wrong</p>
+    </div>
 
-        const hints = {
-            username: 'Checks 25+ sites for this username',
-            email: 'Checks Gravatar, GitHub, HIBP breaches & more',
-            phone: 'Carrier, country & timezone lookup'
-        };
+    <!-- Results -->
+    <div class="results" id="results">
 
-        const placeholders = {
-            username: 'Enter a username...',
-            email: 'Enter an email address...',
-            phone: 'Enter a phone number (with country code)...'
-        };
+        <!-- Summary -->
+        <div class="summary-banner" id="summary-banner"></div>
 
-        document.querySelectorAll('.type-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentType = btn.dataset.type;
-                document.getElementById('query-input').placeholder = placeholders[currentType];
-                document.getElementById('hint').textContent = hints[currentType];
-            });
+        <!-- Stats -->
+        <div class="stats-row" id="stats-row"></div>
+
+        <!-- Primary Findings -->
+        <div class="section" id="section-primary">
+            <div class="section-title">
+                Primary Findings
+                <span class="section-count" id="count-primary">0</span>
+            </div>
+            <div id="primary-results"></div>
+        </div>
+
+        <!-- Social Media -->
+        <div class="section" id="section-social">
+            <div class="section-title">
+                Social Media
+                <span class="section-count" id="count-social">0</span>
+            </div>
+            <div id="social-results"></div>
+        </div>
+
+        <!-- Cross-References -->
+        <div class="section" id="section-cross">
+            <div class="section-title">
+                Cross-References
+                <span class="section-count" id="count-cross">0</span>
+            </div>
+            <div id="cross-results"></div>
+        </div>
+
+        <!-- Breach History -->
+        <div class="section" id="section-breach">
+            <div class="section-title">
+                Breach History
+                <span class="section-count" id="count-breach">0</span>
+            </div>
+            <div id="breach-results"></div>
+        </div>
+
+        <!-- Linked Identities -->
+        <div class="section" id="section-linked">
+            <div class="section-title">
+                Linked Identities
+                <span class="section-count" id="count-linked">0</span>
+            </div>
+            <div id="linked-results"></div>
+        </div>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        OSINT Lookup Tool — authorized use only
+    </footer>
+</div>
+
+<script>
+    /* ── Config ──────────────────────────────────────────── */
+    const API_URL = (
+        location.hostname === 'localhost' ||
+        location.hostname === '127.0.0.1'
+    ) ? 'http://localhost:8000'
+      : 'https://osint-tool-c2np.onrender.com';
+
+    const HINTS = {
+        username: 'Checks 30+ sites for username presence',
+        email:    'Checks Gravatar, GitHub, HIBP & more',
+        phone:    'Carrier, country & timezone lookup',
+        auto:     'Auto-detecting input type…',
+    };
+
+    const PLACEHOLDERS = {
+        username: 'Enter a username…',
+        email:    'Enter an email address…',
+        phone:    'Enter phone number (with country code)…',
+        auto:     'Enter email, phone, or username…',
+    };
+
+    /* ── State ────────────────────────────────────────────── */
+    let currentType = 'username';
+
+    /* ── DOM refs ─────────────────────────────────────────── */
+    const queryInput    = document.getElementById('query-input');
+    const searchBtn     = document.getElementById('search-btn');
+    const loadingState  = document.getElementById('loading-state');
+    const loadingQuery  = document.getElementById('loading-query');
+    const errorState    = document.getElementById('error-state');
+    const errorText     = document.getElementById('error-text');
+    const resultsDiv    = document.getElementById('results');
+    const typeHint      = document.getElementById('hint-text');
+
+    /* ── Type tabs ────────────────────────────────────────── */
+    document.querySelectorAll('.type-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentType = tab.dataset.type;
+            queryInput.placeholder = PLACEHOLDERS[currentType];
+            typeHint.textContent  = HINTS[currentType];
         });
+    });
 
-        document.getElementById('lookup-btn').addEventListener('click', doLookup);
-        document.getElementById('query-input').addEventListener('keypress', e => {
-            if (e.key === 'Enter') doLookup();
-        });
+    /* ── Search trigger ───────────────────────────────────── */
+    searchBtn.addEventListener('click', runLookup);
+    queryInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') runLookup();
+    });
 
-        async function doLookup() {
-            const query = document.getElementById('query-input').value.trim();
-            if (!query) return;
+    /* ── Auto-detect ───────────────────────────────────────── */
+    function detectType(value) {
+        const v = value.trim();
+        if (!v) return null;
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email';
+        if (/^\+?[0-9\s\-().]{7,20}$/.test(v))    return 'phone';
+        return 'username';
+    }
 
-            const btn = document.getElementById('lookup-btn');
-            const loading = document.getElementById('loading');
-            const results = document.getElementById('results');
-            const error = document.getElementById('error');
+    queryInput.addEventListener('input', () => {
+        const v = queryInput.value.trim();
+        if (!v) return;
+        const detected = detectType(v);
+        if (detected !== currentType) {
+            document.querySelectorAll('.type-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.type === detected);
+            });
+            currentType = detected;
+            queryInput.placeholder = PLACEHOLDERS[currentType];
+            typeHint.textContent   = HINTS[currentType];
+        }
+    });
 
-            btn.disabled = true;
-            btn.textContent = 'Searching...';
-            loading.style.display = 'block';
-            results.classList.remove('visible');
-            error.style.display = 'none';
+    /* ── Core lookup ───────────────────────────────────────── */
+    async function runLookup() {
+        const query = queryInput.value.trim();
+        if (!query) return;
 
-            try {
-                const resp = await fetch(`${API_URL}/lookup`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query, lookup_type: currentType })
-                });
-
-                if (!resp.ok) {
-                    const errData = await resp.json();
-                    throw new Error(errData.detail || 'Lookup failed');
-                }
-
-                const data = await resp.json();
-                displayResults(data);
-            } catch (err) {
-                error.textContent = err.message || 'Something went wrong';
-                error.style.display = 'block';
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Search';
-                loading.style.display = 'none';
-            }
+        const detected = detectType(query);
+        if (detected !== currentType) {
+            document.querySelectorAll('.type-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.type === detected);
+            });
+            currentType = detected;
+            queryInput.placeholder = PLACEHOLDERS[currentType];
+            typeHint.textContent    = HINTS[currentType];
         }
 
-        function displayResults(data) {
-            const resultsList = document.getElementById('results-list');
-            const resultsDiv = document.getElementById('results');
-            const statsBar = document.getElementById('stats-bar');
+        setLoading(true);
+        hideError();
 
-            resultsList.innerHTML = '';
-
-            const found = data.results.filter(r => r.status === 'found');
-            const notFound = data.results.filter(r => r.status === 'not_found');
-            const errors = data.results.filter(r => r.status === 'error' || r.status === 'raw');
-
-            // Stats bar
-            statsBar.innerHTML = `
-                <div class="stat"><div class="stat-num green">${found.length}</div><div class="stat-label">Found</div></div>
-                <div class="stat"><div class="stat-num gray">${notFound.length}</div><div class="stat-label">Not Found</div></div>
-                <div class="stat"><div class="stat-num yellow">${errors.length}</div><div class="stat-label">Errors</div></div>
-                <div class="stat"><div class="stat-num">${data.results.length}</div><div class="stat-label">Total Checked</div></div>
-            `;
-
-            // Sort: found first, then not found, then errors
-            const sorted = [...found, ...notFound, ...errors];
-
-            sorted.forEach(result => {
-                const card = document.createElement('div');
-                card.className = `result-card ${result.status}`;
-
-                const siteName = result.url
-                    ? `<a href="${result.url}" target="_blank" rel="noopener">${result.site}</a>`
-                    : result.site;
-
-                let detailHtml = '';
-                if (result.detail) {
-                    detailHtml = `<div class="result-detail">${result.detail}</div>`;
-                }
-
-                // Phone data display
-                if (result.data && currentType === 'phone') {
-                    const d = result.data;
-                    detailHtml += `
-                        <div class="detail-grid">
-                            <div class="detail-item"><div class="detail-key">Country</div><div class="detail-val">${d.country || 'N/A'}</div></div>
-                            <div class="detail-item"><div class="detail-key">Carrier</div><div class="detail-val">${d.carrier || 'N/A'}</div></div>
-                            <div class="detail-item"><div class="detail-key">Timezone</div><div class="detail-val">${d.timezones ? d.timezones[0] : 'N/A'}</div></div>
-                            <div class="detail-item"><div class="detail-key">Formatted</div><div class="detail-val">${d.formatted || 'N/A'}</div></div>
-                        </div>
-                    `;
-                }
-
-                card.innerHTML = `
-                    <div class="result-info">
-                        <div class="result-site">${siteName}</div>
-                        ${detailHtml}
-                    </div>
-                    <span class="result-status ${result.status}">${statusLabel(result.status)}</span>
-                `;
-                resultsList.appendChild(card);
+        try {
+            const resp = await fetch(`${API_URL}/lookup`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ query, lookup_type: currentType }),
             });
 
-            resultsDiv.classList.add('visible');
+            if (!resp.ok) {
+                let msg = `Request failed (${resp.status})`;
+                try { const e = await resp.json(); if (e.detail) msg = e.detail; } catch {}
+                throw new Error(msg);
+            }
+
+            const data = await resp.json();
+            renderResults(data);
+
+        } catch (err) {
+            showError(err.message || 'Lookup failed. Is the server running?');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    /* ── Loading helpers ──────────────────────────────────── */
+    function setLoading(on) {
+        loadingState.classList.toggle('visible', on);
+        loadingQuery.textContent = queryInput.value.trim();
+        searchBtn.disabled = on;
+        if (on) resultsDiv.classList.remove('visible');
+        searchBtn.innerHTML = on
+            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Searching…`
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Search`;
+    }
+
+    function showError(msg) {
+        errorText.textContent = msg;
+        errorState.classList.add('visible');
+    }
+
+    function hideError() {
+        errorState.classList.remove('visible');
+    }
+
+    /* ── Renderer ──────────────────────────────────────────── */
+    function renderResults(data) {
+        // Support both old format (data.results) and new format (data.primary_results etc.)
+        const primary    = data.primary_results    || data.results    || [];
+        const crossRefs  = data.cross_references   || [];
+        const allUsers   = data.all_usernames      || [];
+        const allEmails  = data.all_emails         || [];
+        const allPhones  = data.all_phones         || [];
+        const summary    = data.summary            || '';
+
+        const found      = primary.filter(r => r.status === 'found' || r.found);
+        const notFound   = primary.filter(r => r.status === 'not_found' || r.status === 'absent' || r.not_found);
+        const errors     = primary.filter(r => r.status === 'error');
+
+        // Summary
+        document.getElementById('summary-banner').innerHTML = summary
+            ? `<strong>Query:</strong> ${escapeHtml(data.query)} &nbsp;·&nbsp; <strong>Type:</strong> ${escapeHtml(data.lookup_type || currentType)}<br>${escapeHtml(summary)}`
+            : `<strong>Query:</strong> ${escapeHtml(data.query)} &nbsp;·&nbsp; <strong>Type:</strong> ${escapeHtml(data.lookup_type || currentType)}`;
+
+        // Stats
+        document.getElementById('stats-row').innerHTML = `
+            <div class="stat-chip found"><div class="num">${found.length}</div><div class="lbl">Found</div></div>
+            <div class="stat-chip notfound"><div class="num">${notFound.length}</div><div class="lbl">Not Found</div></div>
+            <div class="stat-chip error"><div class="num">${errors.length}</div><div class="lbl">Errors</div></div>
+            <div class="stat-chip linked"><div class="num">${allUsers.length + allEmails.length + allPhones.length}</div><div class="lbl">Linked</div></div>
+        `;
+
+        // ── Primary Findings ──────────────────────────────────
+        renderSection('primary-results', 'count-primary', primary,
+            item => buildCard(item, currentType));
+
+        // ── Social Media (derived from primary with social platforms) ──
+        const socialPlatforms = ['twitter','x','facebook','instagram','linkedin','tiktok','snapchat','reddit','youtube','pinterest','tumblr','discord','twitch','mastodon'];
+        const social = primary.filter(r => {
+            const site = (r.site || '').toLowerCase();
+            return socialPlatforms.some(p => site.includes(p));
+        });
+        renderSection('social-results', 'count-social', social,
+            item => buildCard(item, currentType), /*isSocial=*/ true);
+
+        // ── Cross-References ─────────────────────────────────
+        renderSection('cross-results', 'count-cross', crossRefs,
+            item => buildCard(item, currentType));
+
+        // ── Breach History ───────────────────────────────────
+        const breachPlatforms = ['haveibeenpwned','hibp','breach','pwned','leak','dehashed'];
+        const breaches = primary.filter(r => {
+            const site = (r.site || '').toLowerCase();
+            return breachPlatforms.some(p => site.includes(p));
+        });
+        renderSection('breach-results', 'count-breach', breaches,
+            item => buildCard(item, currentType));
+
+        // ── Linked Identities ────────────────────────────────
+        renderLinked(allUsers, allEmails, allPhones);
+        resultsDiv.classList.add('visible');
+    }
+
+    /* ── Build a result card ──────────────────────────────── */
+    function buildCard(item, lookupType) {
+        const status  = item.status || (item.found ? 'found' : item.not_found ? 'not_found' : 'error');
+        const site    = item.site   || item.platform || 'Unknown';
+        const detail  = item.detail || item.description || item.message || '';
+        const url     = item.url    || item.link || '';
+        const source  = item.source || '';
+        const rawData = item.data   || item.raw  || {};
+
+        const isFound = status === 'found' || item.found === true;
+
+        // Platform emoji fallback (only if icon not set)
+        const platformEmojis = {
+            'github':'🐙','twitter':'🐦','x':'𝕏','facebook':'📘','instagram':'📷',
+            'linkedin':'💼','tiktok':'🎵','snapchat':'👻','reddit':'🤖','youtube':'▶️',
+            'pinterest':'📌','tumblr':'📰','discord':'💬','twitch':'📺','mastodon':'🐘',
+            'gravatar':'👤','keybase':'🔑','haveibeenpwned':'🔓','hibp':'🔓',
+            'default':'🌐'
+        };
+        const iconEmoji = platformEmojis[site.toLowerCase()] || platformEmojis.default;
+
+        const siteHtml = url
+            ? `<a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(site)}</a>`
+            : escapeHtml(site);
+
+        let detailHtml = '';
+        if (detail) {
+            detailHtml = `<div class="result-detail">${escapeHtml(detail)}</div>`;
         }
 
-        function statusLabel(status) {
-            switch (status) {
-                case 'found': return '✓ Found';
-                case 'not_found': return '—';
-                case 'error': return '⚠ Error';
-                default: return status;
-            }
+        // Extra data grid for phone lookups
+        if (lookupType === 'phone' && (rawData.country || rawData.carrier)) {
+            detailHtml += `
+                <div class="detail-grid">
+                    ${rawData.country    ? `<div class="detail-item"><div class="detail-key">Country</div><div class="detail-val">${escapeHtml(rawData.country)}</div></div>` : ''}
+                    ${rawData.carrier    ? `<div class="detail-item"><div class="detail-key">Carrier</div><div class="detail-val">${escapeHtml(rawData.carrier)}</div></div>` : ''}
+                    ${rawData.timezones  ? `<div class="detail-item"><div class="detail-key">Timezone</div><div class="detail-val">${escapeHtml(rawData.timezones[0])}</div></div>` : ''}
+                    ${rawData.formatted  ? `<div class="detail-item"><div class="detail-key">Formatted</div><div class="detail-val">${escapeHtml(rawData.formatted)}</div></div>` : ''}
+                </div>`;
         }
-    </script>
+
+        let sourceHtml = '';
+        if (source) {
+            sourceHtml = `<div class="result-source">src: ${escapeHtml(source)}</div>`;
+        }
+
+        return `
+            <div class="result-card ${isFound ? 'found' : status}">
+                <div class="result-icon">${iconEmoji}</div>
+                <div class="result-body">
+                    <div class="result-platform">${siteHtml}</div>
+                    ${detailHtml}
+                    ${sourceHtml}
+                </div>
+                <span class="result-status ${isFound ? 'found' : status}">${statusLabel(status)}</span>
+            </div>`;
+    }
+
+    /* ── Render a section ────────────────────────────────── */
+    function renderSection(containerId, countId, items, buildFn) {
+        const container = document.getElementById(containerId);
+        const countEl    = document.getElementById(countId);
+        const section    = container.closest('.section');
+
+        if (!items || items.length === 0) {
+            countEl.textContent = '0';
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        countEl.textContent   = items.length;
+        container.innerHTML    = items.map(buildFn).join('');
+    }
+
+    /* ── Render linked identities ─────────────────────────── */
+    function renderLinked(usernames, emails, phones) {
+        const container = document.getElementById('linked-results');
+        const countEl    = document.getElementById('count-linked');
+        const section    = container.closest('.section');
+
+        const items = [
+            ...usernames.map(v => ({ type: 'USER', value: v })),
+            ...emails.map(v  => ({ type: 'EMAIL', value: v })),
+            ...phones.map(v  => ({ type: 'PHONE', value: v })),
+        ];
+
+        if (items.length === 0) {
+            countEl.textContent = '0';
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        countEl.textContent   = items.length;
+        container.innerHTML    = items.map(item => `
+            <div class="linked-item">
+                <span class="linked-type">${escapeHtml(item.type)}</span>
+                <span class="linked-value">${escapeHtml(item.value)}</span>
+                <span class="linked-tag">linked</span>
+            </div>`).join('');
+    }
+
+    /* ── Status label ─────────────────────────────────────── */
+    function statusLabel(status) {
+        switch (status) {
+            case 'found':     return '✓ Found';
+            case 'not_found': return '— Not found';
+            case 'absent':    return '— Not found';
+            case 'error':     return '⚠ Error';
+            default:          return escapeHtml(status);
+        }
+    }
+
+    /* ── Escape helpers ───────────────────────────────────── */
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function escapeAttr(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+</script>
 </body>
 </html>
